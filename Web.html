@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Arm Controller</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1d;
+            --card-color: #2c2f33;
+            --primary-color: #4f545c;
+            --accent-color: #7289da;
+            --text-color: #ffffff;
+            --slider-track: #4f545c;
+            --slider-thumb: #7289da;
+            --status-disconnected: #c3073f;
+            --status-connected: #4caf50;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --error-bg: #c3073f;
+        }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #connectionError {
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--error-bg);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            z-index: 1000;
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+            justify-content: center;
+        }
+        .card {
+            background-color: var(--card-color);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            flex-grow: 1;
+        }
+        .controls-card {
+            min-width: 300px;
+        }
+        .eyes-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            min-width: 300px;
+        }
+        h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            text-align: center;
+        }
+        .slider-group {
+            margin-bottom: 20px;
+        }
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 10px;
+            background: var(--slider-track);
+            outline: none;
+            border-radius: 5px;
+            transition: opacity .2s;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            background: var(--slider-thumb);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid var(--card-color);
+        }
+        .slider::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            background: var(--slider-thumb);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid var(--card-color);
+        }
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            padding: 12px 15px;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        button:hover {
+            background-color: var(--accent-color);
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        #recordBtn.recording {
+            background-color: var(--status-disconnected);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(195, 7, 63, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(195, 7, 63, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(195, 7, 63, 0); }
+        }
+        .status-indicator {
+            align-self: flex-end;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--status-disconnected);
+            transition: background-color 0.5s;
+        }
+        #statusDot.connected {
+            background-color: var(--status-connected);
+        }
+        #eyesCanvas {
+            background-color: #000;
+            border-radius: 8px;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body>
+
+<div id="connectionError">
+    <strong>Koneksi Gagal!</strong><br>Pastikan file <code>server.py</code> sudah berjalan di terminal.
+</div>
+
+<div class="container">
+    <div class="card controls-card">
+        <h2>Arm Controller</h2>
+        <div class="slider-group">
+            <label for="baseSlider"><span>B (Base)</span><span id="baseValue">90</span></label>
+            <input type="range" min="0" max="180" value="90" class="slider" id="baseSlider" data-servo="B">
+        </div>
+        <div class="slider-group">
+            <label for="shoulderSlider"><span>S (Shoulder)</span><span id="shoulderValue">90</span></label>
+            <input type="range" min="0" max="180" value="90" class="slider" id="shoulderSlider" data-servo="S">
+        </div>
+        <div class="slider-group">
+            <label for="elbowSlider"><span>E (Elbow)</span><span id="elbowValue">90</span></label>
+            <input type="range" min="0" max="180" value="90" class="slider" id="elbowSlider" data-servo="E">
+        </div>
+        <div class="slider-group">
+            <label for="gripperSlider"><span>G (Gripper)</span><span id="gripperValue">90</span></label>
+            <input type="range" min="0" max="180" value="90" class="slider" id="gripperSlider" data-servo="G">
+        </div>
+    </div>
+
+    <div class="card eyes-card">
+        <h2> Skipy </h2>
+        <canvas id="eyesCanvas" width="256" height="128"></canvas>
+        <div class="button-group">
+            <button id="homeBtn">Home</button>
+            <button id="recordBtn">Record</button>
+            <button id="addPointBtn">Add Point</button>
+            <button id="stopBtn">Stop</button>
+            <button id="playBtn">Play</button>
+        </div>
+        <div class="status-indicator">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    const websocket = new WebSocket('ws://localhost:8765');
+    
+    // Status Elements
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const connectionErrorDiv = document.getElementById('connectionError');
+    let isRecording = false;
+
+    // WebSocket Event Handlers
+    websocket.onopen = () => {
+        console.log('Connected to WebSocket server');
+        statusDot.classList.add('connected');
+        statusText.textContent = 'Connected';
+        connectionErrorDiv.style.display = 'none'; // Sembunyikan pesan error jika koneksi berhasil
+    };
+
+    websocket.onclose = () => {
+        console.log('Disconnected from WebSocket server');
+        statusDot.classList.remove('connected');
+        statusText.textContent = 'Disconnected';
+    };
+
+    websocket.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        statusText.textContent = 'Connection Error';
+        connectionErrorDiv.style.display = 'block'; // Tampilkan pesan error jika koneksi gagal
+    };
+    
+    function sendCommand(command) {
+        if (websocket.readyState === WebSocket.OPEN) {
+            websocket.send(command + ',');
+        } else {
+            console.warn('WebSocket is not open. Command not sent:', command);
+        }
+    }
+
+    // Slider Controls
+    document.querySelectorAll('.slider').forEach(slider => {
+        const valueSpan = document.getElementById(slider.id.replace('Slider', 'Value'));
+        slider.addEventListener('input', () => {
+            valueSpan.textContent = slider.value;
+        });
+        slider.addEventListener('change', () => {
+            const command = slider.dataset.servo + slider.value;
+            sendCommand(command);
+        });
+    });
+
+    // Button Controls
+    document.getElementById('homeBtn').addEventListener('click', () => sendCommand('HOME'));
+    document.getElementById('playBtn').addEventListener('click', () => sendCommand('PLAY'));
+
+    const recordBtn = document.getElementById('recordBtn');
+    recordBtn.addEventListener('click', () => {
+        sendCommand('REC_START');
+        isRecording = true;
+        recordBtn.classList.add('recording');
+        recordBtn.textContent = 'Recording...';
+    });
+
+    document.getElementById('addPointBtn').addEventListener('click', () => {
+        if(isRecording) {
+            sendCommand('REC_ADD');
+        } else {
+            alert("Tekan 'Record' dulu untuk mulai merekam sekuens.");
+        }
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+        sendCommand('REC_STOP');
+        isRecording = false;
+        recordBtn.classList.remove('recording');
+        recordBtn.textContent = 'Record';
+    });
+
+
+    // Interactive Eyes Canvas
+    const canvas = document.getElementById('eyesCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Konstanta untuk mata yang digayakan
+    const eyeSpacing = 40; // Jarak dari pusat ke masing-masing mata
+    const center_x = canvas.width / 2;
+    const center_y = canvas.height / 2;
+    
+    let mouseX = center_x;
+    let mouseY = center_y;
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        // Kembalikan mata ke tengah saat mouse keluar dari canvas
+        mouseX = center_x;
+        mouseY = center_y;
+    });
+
+    function drawRightEye(cx, cy, offsetX, offsetY) {
+        ctx.save();
+        // Pindahkan titik asal ke pusat mata + offset interaktif
+        ctx.translate(cx + offsetX, cy + offsetY);
+        
+        // Gaya mata dengan efek cahaya
+        ctx.fillStyle = '#00d0ff';
+        ctx.shadowColor = '#00d0ff';
+        ctx.shadowBlur = 15;
+
+        ctx.beginPath();
+        // Titik-titik ini relatif terhadap titik asal yang sudah dipindahkan
+        ctx.moveTo(-20, 25);  // Bawah-kiri
+        ctx.lineTo(-25, -25); // Atas-kiri
+        ctx.lineTo(25, -25);  // Atas-kanan
+        // Kurva kuadratik untuk sisi luar yang melengkung
+        ctx.quadraticCurveTo(15, 0, 20, 25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+    
+    function drawLeftEye(cx, cy, offsetX, offsetY) {
+        ctx.save();
+        ctx.translate(cx + offsetX, cy + offsetY);
+        
+        ctx.fillStyle = '#00d0ff';
+        ctx.shadowColor = '#00d0ff';
+        ctx.shadowBlur = 15;
+
+        ctx.beginPath();
+        // Titik-titik yang dicerminkan untuk mata kiri
+        ctx.moveTo(20, 25);   // Bawah-kanan
+        ctx.lineTo(25, -25);  // Atas-kanan
+        ctx.lineTo(-25, -25); // Atas-kiri
+        ctx.quadraticCurveTo(-15, 0, -20, 25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function animate() {
+        // Letakkan di awal untuk performa animasi yang lebih halus
+        requestAnimationFrame(animate);
+        
+        // Bersihkan canvas setiap frame
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // --- Logika Interaktivitas ---
+        const maxOffset = 6; // Jarak maksimal mata bisa bergerak dari tengah
+        const sensitivity = 30; // Angka lebih kecil = lebih sensitif
+
+        // Hitung vektor dari pusat canvas ke mouse
+        const dx = mouseX - center_x;
+        const dy = mouseY - center_y;
+        const angle = Math.atan2(dy, dx);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Hitung seberapa jauh mata harus bergerak berdasarkan jarak mouse
+        const offset = Math.min(maxOffset, distance / sensitivity);
+        
+        const moveX = offset * Math.cos(angle);
+        const moveY = offset * Math.sin(angle);
+
+        // Gambar kedua mata dengan offset yang telah dihitung
+        drawLeftEye(center_x - eyeSpacing, center_y, moveX, moveY);
+        drawRightEye(center_x + eyeSpacing, center_y, moveX, moveY);
+    }
+    
+    // Mulai animasi
+    animate();
+
+</script>
+</body>
+</html>
+
